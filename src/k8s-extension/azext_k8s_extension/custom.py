@@ -484,6 +484,9 @@ def _get_container_insights_settings(cmd, resource_group_name,
                 'loganalyticsworkspaceresourceid')
         workspace_resource_id = configuration_settings['omsagent.secret.logAnalyticsWorkspaceResourceID']
 
+    if not configuration_protected_settings:
+        configuration_protected_settings = {}
+
     if not workspace_resource_id:
         workspace_resource_id = _ensure_default_log_analytics_workspace_for_monitoring(
             cmd, subscription_id, resource_group_name, cluster_name)
@@ -508,7 +511,7 @@ def _get_container_insights_settings(cmd, resource_group_name,
         raise CLIError(
             'Fails to retrieve workspace by {}'.format(workspace_name))
 
-    shared_keys = log_analytics_client.workspaces.get_shared_keys(
+    shared_keys = log_analytics_client.shared_keys.get_shared_keys(
         workspace_rg_name, workspace_name)
     if not shared_keys:
         raise CLIError('Fails to retrieve shared key for workspace {}'.format(
