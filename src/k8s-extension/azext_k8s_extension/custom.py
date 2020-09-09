@@ -13,10 +13,11 @@ from azext_k8s_extension.vendored_sdks.models import ErrorResponseException
 from azext_k8s_extension.vendored_sdks.models import ScopeCluster
 from azext_k8s_extension.vendored_sdks.models import ScopeNamespace
 from azext_k8s_extension.vendored_sdks.models import Scope
-from azure.cli.core.commands.client_factory import get_subscription_id
+from azure.cli.core.commands.client_factory import get_mgmt_service_client, get_subscription_id
 from msrestazure.azure_exceptions import CloudError
 from azure.cli.core.commands import LongRunningOperation
 from azure.cli.core.util import sdk_no_wait
+import datetime
 
 from ._client_factory import (
     cf_resources, cf_resource_groups, cf_log_analytics)
@@ -175,10 +176,8 @@ def _get_rg_location(ctx, resource_group_name, subscription_id=None):
 def _invoke_deployment(cmd, resource_group_name, deployment_name, template, parameters, validate, no_wait,
                        subscription_id=None):
     from azure.cli.core.profiles import ResourceType
-    DeploymentProperties = cmd.get_models(
-        'DeploymentProperties', resource_type=ResourceType.MGMT_RESOURCE_RESOURCES)
-    properties = DeploymentProperties(
-        template=template, parameters=parameters, mode='incremental')
+    DeploymentProperties = cmd.get_models('DeploymentProperties', resource_type=ResourceType.MGMT_RESOURCE_RESOURCES)
+    properties = DeploymentProperties(template=template, parameters=parameters, mode='incremental')
     smc = get_mgmt_service_client(cmd.cli_ctx, ResourceType.MGMT_RESOURCE_RESOURCES,
                                   subscription_id=subscription_id).deployments
     if validate:
@@ -187,13 +186,11 @@ def _invoke_deployment(cmd, resource_group_name, deployment_name, template, para
         logger.info('==== END TEMPLATE ====')
 
     if cmd.supported_api_version(min_api='2019-10-01', resource_type=ResourceType.MGMT_RESOURCE_RESOURCES):
-        Deployment = cmd.get_models(
-            'Deployment', resource_type=ResourceType.MGMT_RESOURCE_RESOURCES)
+        Deployment = cmd.get_models('Deployment', resource_type=ResourceType.MGMT_RESOURCE_RESOURCES)
         deployment = Deployment(properties=properties)
 
         if validate:
-            validation_poller = smc.validate(
-                resource_group_name, deployment_name, deployment)
+            validation_poller = smc.validate(resource_group_name, deployment_name, deployment)
             return LongRunningOperation(cmd.cli_ctx)(validation_poller)
         return sdk_no_wait(no_wait, smc.create_or_update, resource_group_name, deployment_name, deployment)
 
@@ -374,27 +371,17 @@ def _ensure_default_log_analytics_workspace_for_monitoring(cmd, subscription_id,
 
 
 def _ensure_container_insights_for_monitoring(cmd, workspace_resource_id):
-    workspace_resource_id = workspace_resource_id.strip()
-
-    if not workspace_resource_id.startswith('/'):
-        workspace_resource_id = '/' + workspace_resource_id
-
-    if workspace_resource_id.endswith('/'):
-        workspace_resource_id = workspace_resource_id.rstrip('/')
-
     # extract subscription ID and resource group from workspace_resource_id URL
     try:
         subscription_id = workspace_resource_id.split('/')[2]
         resource_group = workspace_resource_id.split('/')[4]
     except IndexError:
-        raise CLIError(
-            'Could not locate resource group in workspace-resource-id URL.')
+        raise CLIError('Could not locate resource group in workspace-resource-id URL.')
 
     # region of workspace can be different from region of RG so find the location of the workspace_resource_id
     resources = cf_resources(cmd.cli_ctx, subscription_id)
     try:
-        resource = resources.get_by_id(
-            workspace_resource_id, '2015-11-01-preview')
+        resource = resources.get_by_id(workspace_resource_id, '2015-11-01-preview')
         location = resource.location
     except CloudError as ex:
         raise ex
@@ -402,8 +389,7 @@ def _ensure_container_insights_for_monitoring(cmd, workspace_resource_id):
     unix_time_in_millis = int(
         (datetime.datetime.utcnow() - datetime.datetime.utcfromtimestamp(0)).total_seconds() * 1000.0)
 
-    solution_deployment_name = 'ContainerInsights-{}'.format(
-        unix_time_in_millis)
+    solution_deployment_name = 'ContainerInsights-{}'.format(unix_time_in_millis)
 
     # pylint: disable=line-too-long
     template = {
@@ -481,15 +467,15 @@ def _ensure_container_insights_for_monitoring(cmd, workspace_resource_id):
 
     deployment_name = 'aks-monitoring-{}'.format(unix_time_in_millis)
     # publish the Container Insights solution to the Log Analytics workspace
-    return _invoke_deployment(cmd.cli_ctx, resource_group, deployment_name, template, params,
+    return _invoke_deployment(cmd, resource_group, deployment_name, template, params,
                               validate=False, no_wait=False, subscription_id=subscription_id)
-
 
 def _get_container_insights_settings(cmd, resource_group_name,
                                      cluster_name, configuration_settings, configuration_protected_settings):
     from msrestazure.tools import parse_resource_id  # pylint: disable=import-error
 
     subscription_id = get_subscription_id(cmd.cli_ctx)
+    workspace_resource_id = ''
     if not configuration_settings:
         configuration_settings = {}
     else:
