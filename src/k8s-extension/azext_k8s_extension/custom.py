@@ -514,17 +514,16 @@ def _get_container_insights_settings(cmd, resource_group_name,
 
     # extract subscription ID and resource group from workspace_resource_id URL
     parsed = parse_resource_id(workspace_resource_id)
-    workspace_resource_group_name, workspace_name, subscription_id = parsed["resource_group"], parsed["name"], parsed["subscription"]
+    workspace_sub_id, workspace_rg_name, workspace_name = parsed["subscription"], parsed["resource_group"], parsed["name"]
 
-    log_analytics_client = cf_log_analytics(cmd.cli_ctx)
-    log_analytics_workspace = log_analytics_client.workspaces.get(
-        workspace_resource_group_name, workspace_name)
+    log_analytics_client = cf_log_analytics(cmd.cli_ctx, workspace_sub_id)
+    log_analytics_workspace = log_analytics_client.workspaces.get(workspace_rg_name, workspace_name)
     if not log_analytics_workspace:
         raise CLIError(
             'Fails to retrieve workspace by {}'.format(workspace_name))
 
     shared_keys = log_analytics_client.workspaces.get_shared_keys(
-        workspace_resource_group_name, workspace_name)
+        workspace_rg_name, workspace_name)
     if not shared_keys:
         raise CLIError('Fails to retrieve shared key for workspace {}'.format(
             log_analytics_workspace))

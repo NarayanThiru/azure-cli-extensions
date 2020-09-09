@@ -22,6 +22,6 @@ def cf_resources(cli_ctx, subscription_id=None):
     return get_mgmt_service_client(cli_ctx, ResourceType.MGMT_RESOURCE_RESOURCES,
                                    subscription_id=subscription_id).resources
 
-def cf_log_analytics(cli_ctx, *_, **__):
+def cf_log_analytics(cli_ctx, subscription_id=None):
     from azure.mgmt.loganalytics import LogAnalyticsManagementClient
-    return get_mgmt_service_client(cli_ctx, LogAnalyticsManagementClient)
+    return get_mgmt_service_client(cli_ctx, LogAnalyticsManagementClient, subscription_id=subscription_id)
