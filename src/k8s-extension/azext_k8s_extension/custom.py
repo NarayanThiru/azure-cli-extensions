@@ -82,8 +82,7 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
         ext_scope = Scope(namespace=scope_namespace, cluster=None)
 
     if extension_type == 'azuremonitor-containers':
-        subscription_id = get_subscription_id(cmd.cli_ctx)
-        _get_container_insights_settings(cmd, subscription_id, resource_group_name,
+        _get_container_insights_settings(cmd, resource_group_name,
                                          cluster_name, configuration_settings, configuration_protected_settings)
 
     # Get Configuration Settings
@@ -486,8 +485,11 @@ def _ensure_container_insights_for_monitoring(cmd, workspace_resource_id):
                               validate=False, no_wait=False, subscription_id=subscription_id)
 
 
-def _get_container_insights_settings(cmd, subscription_id, resource_group_name,
+def _get_container_insights_settings(cmd, resource_group_name,
                                      cluster_name, configuration_settings, configuration_protected_settings):
+    from msrestazure.tools import parse_resource_id  # pylint: disable=import-error
+
+    subscription_id = get_subscription_id(cmd.cli_ctx)
     if not configuration_settings:
         configuration_settings = {}
     else:
@@ -511,13 +513,8 @@ def _get_container_insights_settings(cmd, subscription_id, resource_group_name,
     _ensure_container_insights_for_monitoring(cmd, workspace_resource_id)
 
     # extract subscription ID and resource group from workspace_resource_id URL
-    try:
-        subscription_id = workspace_resource_id.split('/')[2]
-        workspace_resource_group_name = workspace_resource_id.split('/')[4]
-        workspace_name = workspace_resource_id.split('/')[8]
-    except IndexError:
-        raise CLIError(
-            'Could not locate resource group in workspace-resource-id.')
+    parsed = parse_resource_id(workspace_resource_id)
+    workspace_resource_group_name, workspace_name, subscription_id = parsed["resource_group"], parsed["name"], parsed["subscription"]
 
     log_analytics_client = cf_log_analytics(cmd.cli_ctx)
     log_analytics_workspace = log_analytics_client.workspaces.get(
