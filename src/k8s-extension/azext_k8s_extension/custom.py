@@ -83,6 +83,12 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
         ext_scope = Scope(namespace=scope_namespace, cluster=None)
 
     if extension_type == 'azuremonitor-containers':
+        if not configuration_settings:
+            configuration_settings = {}
+
+        if not configuration_protected_settings:
+            configuration_protected_settings = {}
+
         _get_container_insights_settings(cmd, resource_group_name,
                                          cluster_name, configuration_settings, configuration_protected_settings)
 
@@ -476,16 +482,10 @@ def _get_container_insights_settings(cmd, resource_group_name,
 
     subscription_id = get_subscription_id(cmd.cli_ctx)
     workspace_resource_id = ''
-    if not configuration_settings:
-        configuration_settings = {}
-    else:
-        if 'loganalyticsworkspaceresourceid' in configuration_settings:
-            configuration_settings['logAnalyticsWorkspaceResourceID'] = configuration_settings.pop(
+    if 'loganalyticsworkspaceresourceid' in configuration_settings:
+        configuration_settings['logAnalyticsWorkspaceResourceID'] = configuration_settings.pop(
                 'loganalyticsworkspaceresourceid')
         workspace_resource_id = configuration_settings['omsagent.secret.logAnalyticsWorkspaceResourceID']
-
-    if not configuration_protected_settings:
-        configuration_protected_settings = {}
 
     if not workspace_resource_id:
         workspace_resource_id = _ensure_default_log_analytics_workspace_for_monitoring(
