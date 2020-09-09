@@ -10,18 +10,13 @@ from azure.cli.core.commands.client_factory import get_mgmt_service_client, get_
 from msrestazure.azure_exceptions import CloudError
 from azure.cli.core.commands import LongRunningOperation
 from azure.cli.core.util import sdk_no_wait
+from msrestazure.tools import parse_resource_id
 import datetime
 
 from ._client_factory import (
     cf_resources, cf_resource_groups, cf_log_analytics)
 
 logger = get_logger(__name__)
-
-def _get_rg_location(ctx, resource_group_name, subscription_id=None):
-    groups = cf_resource_groups(ctx, subscription_id=subscription_id)
-    # Just do the get, we don't need the result, it will error out if the group doesn't exist.
-    rg = groups.get(resource_group_name)
-    return rg.location
 
 
 def _invoke_deployment(cmd, resource_group_name, deployment_name, template, parameters, validate, no_wait,
@@ -51,7 +46,7 @@ def _invoke_deployment(cmd, resource_group_name, deployment_name, template, para
 
 
 def _ensure_default_log_analytics_workspace_for_monitoring(cmd, subscription_id,
-                                                           resource_group_name, cluster_name=None):
+                                                           cluster_resource_group_name, cluster_name):
     # mapping for azure public cloud
     # log analytics workspaces cannot be created in WCUS region due to capacity limits
     # so mapped to EUS per discussion with log analytics team
@@ -137,41 +132,50 @@ def _ensure_default_log_analytics_workspace_for_monitoring(cmd, subscription_id,
         "usgovvirginia": "usgovvirginia"
     }
 
-    rg_location = _get_rg_location(cmd.cli_ctx, resource_group_name)
-    cloud_name = cmd.cli_ctx.cloud.name
+    cluster_location = ''
+    resources = cf_resources(cmd.cli_ctx, subscription_id)
 
+    cluster_resource_id = '/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Kubernetes' \
+        '/connectedClusters/{2}'.format(subscription_id, cluster_resource_group_name, cluster_name)
+    try:
+        resource = resources.get_by_id(cluster_resource_id, '2020-01-01-preview')
+        cluster_location = resource.location.lower()
+    except CloudError as ex:
+        raise ex
+
+    cloud_name = cmd.cli_ctx.cloud.name
     workspace_region = "eastus"
     workspace_region_code = "EUS"
 
     # sanity check that locations and clouds match.
-    if ((cloud_name.lower() == 'azurecloud' and AzureChinaRegionToOmsRegionMap.get(rg_location, False)) or
-            (cloud_name.lower() == 'azurecloud' and AzureFairfaxRegionToOmsRegionMap.get(rg_location, False))):
+    if ((cloud_name.lower() == 'azurecloud' and AzureChinaRegionToOmsRegionMap.get(cluster_location, False)) or
+            (cloud_name.lower() == 'azurecloud' and AzureFairfaxRegionToOmsRegionMap.get(cluster_location, False))):
         raise CLIError('Wrong cloud (azurecloud) setting for region {}, please use "az cloud set ..."'
-                       .format(rg_location))
+                       .format(cluster_location))
 
-    if ((cloud_name.lower() == 'azurechinacloud' and AzureCloudRegionToOmsRegionMap.get(rg_location, False)) or
-            (cloud_name.lower() == 'azurechinacloud' and AzureFairfaxRegionToOmsRegionMap.get(rg_location, False))):
+    if ((cloud_name.lower() == 'azurechinacloud' and AzureCloudRegionToOmsRegionMap.get(cluster_location, False)) or
+            (cloud_name.lower() == 'azurechinacloud' and AzureFairfaxRegionToOmsRegionMap.get(cluster_location, False))):
         raise CLIError('Wrong cloud (azurechinacloud) setting for region {}, please use "az cloud set ..."'
-                       .format(rg_location))
+                       .format(cluster_location))
 
-    if ((cloud_name.lower() == 'azureusgovernment' and AzureCloudRegionToOmsRegionMap.get(rg_location, False)) or
-            (cloud_name.lower() == 'azureusgovernment' and AzureChinaRegionToOmsRegionMap.get(rg_location, False))):
+    if ((cloud_name.lower() == 'azureusgovernment' and AzureCloudRegionToOmsRegionMap.get(cluster_location, False)) or
+            (cloud_name.lower() == 'azureusgovernment' and AzureChinaRegionToOmsRegionMap.get(cluster_location, False))):
         raise CLIError('Wrong cloud (azureusgovernment) setting for region {}, please use "az cloud set ..."'
-                       .format(rg_location))
+                       .format(cluster_location))
 
     if cloud_name.lower() == 'azurecloud':
         workspace_region = AzureCloudRegionToOmsRegionMap.get(
-            rg_location, "eastus")
+            cluster_location, "eastus")
         workspace_region_code = AzureCloudLocationToOmsRegionCodeMap.get(
             workspace_region, "EUS")
     elif cloud_name.lower() == 'azurechinacloud':
         workspace_region = AzureChinaRegionToOmsRegionMap.get(
-            rg_location, "chinaeast2")
+            cluster_location, "chinaeast2")
         workspace_region_code = AzureChinaLocationToOmsRegionCodeMap.get(
             workspace_region, "EAST2")
     elif cloud_name.lower() == 'azureusgovernment':
         workspace_region = AzureFairfaxRegionToOmsRegionMap.get(
-            rg_location, "usgovvirginia")
+            cluster_location, "usgovvirginia")
         workspace_region_code = AzureFairfaxLocationToOmsRegionCodeMap.get(
             workspace_region, "USGV")
     else:
@@ -185,7 +189,6 @@ def _ensure_default_log_analytics_workspace_for_monitoring(cmd, subscription_id,
         '/workspaces/{2}'.format(subscription_id,
                                  default_workspace_resource_group, default_workspace_name)
     resource_groups = cf_resource_groups(cmd.cli_ctx, subscription_id)
-    resources = cf_resources(cmd.cli_ctx, subscription_id)
 
     # check if default RG exists
     if resource_groups.check_existence(default_workspace_resource_group):
@@ -223,13 +226,9 @@ def _ensure_default_log_analytics_workspace_for_monitoring(cmd, subscription_id,
 
 def _ensure_container_insights_for_monitoring(cmd, workspace_resource_id):
     # extract subscription ID and resource group from workspace_resource_id URL
-    try:
-        subscription_id = workspace_resource_id.split('/')[2]
-        resource_group = workspace_resource_id.split('/')[4]
-    except IndexError:
-        raise CLIError('Could not locate resource group in workspace-resource-id URL.')
+    parsed = parse_resource_id(workspace_resource_id)
+    subscription_id, resource_group = parsed["subscription"], parsed["resource_group"]
 
-    # region of workspace can be different from region of RG so find the location of the workspace_resource_id
     resources = cf_resources(cmd.cli_ctx, subscription_id)
     try:
         resource = resources.get_by_id(workspace_resource_id, '2015-11-01-preview')
@@ -316,14 +315,13 @@ def _ensure_container_insights_for_monitoring(cmd, workspace_resource_id):
         }
     }
 
-    deployment_name = 'aks-monitoring-{}'.format(unix_time_in_millis)
+    deployment_name = 'arc-k8s-monitoring-{}'.format(unix_time_in_millis)
     # publish the Container Insights solution to the Log Analytics workspace
     return _invoke_deployment(cmd, resource_group, deployment_name, template, params,
                               validate=False, no_wait=False, subscription_id=subscription_id)
 
-def _get_container_insights_settings(cmd, resource_group_name,
+def _get_container_insights_settings(cmd, cluster_resource_group_name,
                                      cluster_name, configuration_settings, configuration_protected_settings):
-    from msrestazure.tools import parse_resource_id  # pylint: disable=import-error
 
     subscription_id = get_subscription_id(cmd.cli_ctx)
     workspace_resource_id = ''
@@ -332,11 +330,20 @@ def _get_container_insights_settings(cmd, resource_group_name,
                 'loganalyticsworkspaceresourceid')
         workspace_resource_id = configuration_settings['logAnalyticsWorkspaceResourceID']
 
+    workspace_resource_id = workspace_resource_id.strip()
+
+    if  'proxyEndpoint' in configuration_settings:
+         # current supported format for proxy endpoint is  http(s)://<user>:<pwd>@<proxyhost>:<port>
+         # do some basic validation since the ci agent does the complete validation
+         proxy = configuration_settings['proxyEndpoint'].strip().lower()
+         proxyparts = proxy.split('://')
+         if (not proxy) or (not proxy.startswith('http://') and not proxy.startswith('https://')) or (len(proxyparts) != 2):
+             raise CLIError('proxyEndpoint url should in this format http(s)://<user>:<pwd>@<proxyhost>:<port>')
+         configuration_settings['omsagent.proxy'] = configuration_settings['proxyEndpoint']
+
     if not workspace_resource_id:
         workspace_resource_id = _ensure_default_log_analytics_workspace_for_monitoring(
-            cmd, subscription_id, resource_group_name, cluster_name)
-
-    workspace_resource_id = workspace_resource_id.strip()
+            cmd, subscription_id, cluster_resource_group_name, cluster_name)
 
     if not workspace_resource_id.startswith('/'):
         workspace_resource_id = '/' + workspace_resource_id

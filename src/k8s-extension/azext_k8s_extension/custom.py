@@ -71,7 +71,7 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
         scope_namespace = ScopeNamespace(target_namespace=target_namespace)
         ext_scope = Scope(namespace=scope_namespace, cluster=None)
 
-    if extension_type == 'azuremonitor-containers':
+    if extension_type.lower() == 'azuremonitor-containers':
         if not configuration_settings:
             configuration_settings = {}
 
