@@ -326,8 +326,9 @@ def _get_container_insights_settings(cmd, cluster_resource_group_name,
     subscription_id = get_subscription_id(cmd.cli_ctx)
     workspace_resource_id = ''
     if 'loganalyticsworkspaceresourceid' in configuration_settings:
-        configuration_settings['logAnalyticsWorkspaceResourceID'] = configuration_settings.pop(
-                'loganalyticsworkspaceresourceid')
+        configuration_settings['logAnalyticsWorkspaceResourceID'] = configuration_settings.pop('loganalyticsworkspaceresourceid')
+
+    if 'logAnalyticsWorkspaceResourceID' in configuration_settings:
         workspace_resource_id = configuration_settings['logAnalyticsWorkspaceResourceID']
 
     workspace_resource_id = workspace_resource_id.strip()
