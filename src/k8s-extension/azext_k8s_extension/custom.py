@@ -485,7 +485,7 @@ def _get_container_insights_settings(cmd, resource_group_name,
     if 'loganalyticsworkspaceresourceid' in configuration_settings:
         configuration_settings['logAnalyticsWorkspaceResourceID'] = configuration_settings.pop(
                 'loganalyticsworkspaceresourceid')
-        workspace_resource_id = configuration_settings['omsagent.secret.logAnalyticsWorkspaceResourceID']
+        workspace_resource_id = configuration_settings['logAnalyticsWorkspaceResourceID']
 
     if not workspace_resource_id:
         workspace_resource_id = _ensure_default_log_analytics_workspace_for_monitoring(
@@ -518,3 +518,4 @@ def _get_container_insights_settings(cmd, resource_group_name,
             log_analytics_workspace))
     configuration_settings['omsagent.secret.wsid'] = log_analytics_workspace.customer_id
     configuration_protected_settings['omsagent.secret.key'] = shared_keys.primary_shared_key
+    configuration_settings['logAnalyticsWorkspaceResourceID'] = workspace_resource_id
