@@ -372,9 +372,13 @@ def _get_container_insights_settings(cmd, cluster_resource_group_name,
     configuration_settings['omsagent.secret.wsid'] = log_analytics_workspace.customer_id
     configuration_settings['logAnalyticsWorkspaceResourceID'] = workspace_resource_id
     configuration_protected_settings['omsagent.secret.key'] = shared_keys.primary_shared_key
-    # set the domain for the agent for the public clouds
+    # set the domain for the ci agent for non azure public clouds
     cloud_name = cmd.cli_ctx.cloud.name
     if cloud_name.lower() == 'azurechinacloud':
         configuration_settings['omsagent.domain'] = 'opinsights.azure.cn'
     elif cloud_name.lower() == 'azureusgovernment':
         configuration_settings['omsagent.domain'] = 'opinsights.azure.us'
+    elif cloud_name.lower() == 'usnat':
+        configuration_settings['omsagent.domain'] = 'opinsights.azure.eaglex.ic.gov'
+    elif cloud_name.lower() == 'ussec':
+        configuration_settings['omsagent.domain'] = 'opinsights.azure.microsoft.scloud'
