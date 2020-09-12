@@ -59,6 +59,20 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
     __validate_version_and_release_train(
         version, release_train, auto_upgrade_minor_version)
 
+    if extension_type.lower() == 'azuremonitor-containers':
+         # hardcoding  name and release_namespace since container insights only supports one instance
+        # and platform doesnt have support extension specific constraints like this
+        name = "container-insights"
+        release_namespace = "container-insights"
+        if not configuration_settings:
+            configuration_settings = {}
+
+        if not configuration_protected_settings:
+            configuration_protected_settings = {}
+
+        _get_container_insights_settings(cmd, resource_group_name,
+                                         cluster_name, configuration_settings, configuration_protected_settings)
+
     # Determine namespace name
     if scope == 'cluster':
         if release_namespace is None:
@@ -70,16 +84,6 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
             target_namespace = name
         scope_namespace = ScopeNamespace(target_namespace=target_namespace)
         ext_scope = Scope(namespace=scope_namespace, cluster=None)
-
-    if extension_type.lower() == 'azuremonitor-containers':
-        if not configuration_settings:
-            configuration_settings = {}
-
-        if not configuration_protected_settings:
-            configuration_protected_settings = {}
-
-        _get_container_insights_settings(cmd, resource_group_name,
-                                         cluster_name, configuration_settings, configuration_protected_settings)
 
     # Get Configuration Settings
     # ##for config_key in configuration_settings:
