@@ -4,6 +4,7 @@
 # --------------------------------------------------------------------------------------------
 # from docutils.nodes import version
 from knack.util import CLIError
+from knack.log import get_logger
 
 from azext_k8s_extension.vendored_sdks.models import ExtensionInstance
 from azext_k8s_extension.vendored_sdks.models import ExtensionInstanceForCreate
@@ -13,6 +14,8 @@ from azext_k8s_extension.vendored_sdks.models import ScopeCluster
 from azext_k8s_extension.vendored_sdks.models import ScopeNamespace
 from azext_k8s_extension.vendored_sdks.models import Scope
 from .containerinsights  import _get_container_insights_settings
+
+logger = get_logger(__name__)
 
 def show_k8s_extension(client, resource_group_name, cluster_name, name, cluster_type):
     """Get an existing K8s Extension.
@@ -60,10 +63,12 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
         version, release_train, auto_upgrade_minor_version)
 
     if extension_type.lower() == 'azuremonitor-containers':
-         # hardcoding  name and release_namespace since container insights only supports one instance
-        # and platform doesnt have support extension specific constraints like this
-        name = "container-insights"
-        release_namespace = "container-insights"
+        # hardcoding  name, release_namespace and scope since ci only supports one instance and cluster scope
+        # and platform doesnt have support yet extension specific constraints like this
+        logger.warn('ignoring name, release_namespace and scope parameters since azuremonitor-containers only supports cluster scope and one instance of the extension')
+        name = 'azuremonitor-containers'
+        release_namespace = 'azuremonitor-containers'
+        scope = 'cluster'
         if not configuration_settings:
             configuration_settings = {}
 
