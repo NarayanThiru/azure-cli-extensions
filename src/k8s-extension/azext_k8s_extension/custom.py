@@ -100,14 +100,14 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
         name = 'azuremonitor-containers'
         release_namespace = 'azuremonitor-containers'
         scope = 'cluster'
-        if not configuration_settings:
-            configuration_settings = {}
+        if not config_settings:
+            config_settings = {}
 
-        if not configuration_protected_settings:
-            configuration_protected_settings = {}
+        if not config_protected_settings:
+            config_protected_settings = {}
 
         _get_container_insights_settings(cmd, resource_group_name,
-                                         cluster_name, configuration_settings, configuration_protected_settings)
+                                         cluster_name, config_settings, config_protected_settings)
 
     # Determine namespace name
     if scope == 'cluster':
