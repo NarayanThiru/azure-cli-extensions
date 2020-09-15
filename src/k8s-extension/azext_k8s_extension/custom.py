@@ -96,7 +96,7 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
     if extension_type.lower() == 'azuremonitor-containers':
         # hardcoding  name, release_namespace and scope since ci only supports one instance and cluster scope
         # and platform doesnt have support yet extension specific constraints like this
-        logger.warn('ignoring name, release_namespace and scope parameters since azuremonitor-containers only supports cluster scope and one instance of the extension')
+        logger.warn('Ignoring name, release_namespace and scope parameters since azuremonitor-containers only supports cluster scope and single instance of this extension')
         name = 'azuremonitor-containers'
         release_namespace = 'azuremonitor-containers'
         scope = 'cluster'
