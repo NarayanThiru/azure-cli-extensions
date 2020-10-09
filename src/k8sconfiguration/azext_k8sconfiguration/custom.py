@@ -8,6 +8,8 @@ import json
 from knack.util import CLIError
 from knack.log import get_logger
 from urllib.parse import urlparse
+from Crypto.PublicKey import RSA
+from paramiko.hostkeys import HostKeyEntry
 
 from azext_k8sconfiguration.vendored_sdks.models import SourceControlConfiguration
 from azext_k8sconfiguration.vendored_sdks.models import HelmOperatorProperties
@@ -66,6 +68,8 @@ def create_k8sconfiguration(client, resource_group_name, cluster_name, name, rep
 
     protected_settings = __get_protected_settings(ssh_private_key, ssh_private_key_filepath, https_user, https_key)
     knownhost_data = __get_data_from_key_or_file(ssh_known_hosts_contents, ssh_known_hosts_filepath)
+    if knownhost_data != '':
+        __validate_known_hosts_file(knownhost_data)
     
     # Flag which parameters have been set and validate these settings against the set repository url
     ssh_private_key_set = ssh_private_key != '' or ssh_private_key_filepath != ''
@@ -119,6 +123,7 @@ def update_k8sconfiguration(client, resource_group_name, cluster_name, name, clu
 
     knownhost_data = __get_data_from_key_or_file(ssh_known_hosts_contents, ssh_known_hosts_filepath)
     if knownhost_data != '':
+        __validate_known_hosts_file(knownhost_data)
         config['ssh_known_hosts_contents'] = knownhost_data
         update_yes = True
     
@@ -169,8 +174,11 @@ def __get_protected_settings(ssh_private_key, ssh_private_key_filepath, https_us
     ssh_private_key_data = __get_data_from_key_or_file(ssh_private_key, ssh_private_key_filepath)
 
     # Add gitops private key data to protected settings if exists
-
     if ssh_private_key_data != '':
+        try:
+            RSA.importKey(__from_base64(ssh_private_key_data))
+        except Exception as ex:
+            raise CLIError("Error! ssh private key provided in wrong format, ensure your private key is valid") from ex
         protected_settings["sshPrivateKey"] = ssh_private_key_data
 
     # Check if both httpsUser and httpsKey exist, then add to protected settings
@@ -214,6 +222,20 @@ def __validate_url_with_params(repository_url, ssh_private_key_set, known_hosts_
         if https_auth_set:
             raise CLIError('Error! https auth (--https-user and --https-key) cannot be used with a non-http(s) url')
 
+def __validate_known_hosts_file(knownhost_data):
+    knownhost_str = __from_base64(knownhost_data).decode('utf-8')
+    entries = knownhost_str.split('\n')
+    for entry in entries:
+        entry = entry.strip(' ')
+        if len(entry) == 0:
+            continue
+        try:
+            host_key = HostKeyEntry.from_line(entry)
+            if not host_key:
+                raise Exception('not enough fields found in known_hosts line')
+        except Exception as ex:
+            raise CLIError('Error! ssh known_hosts provided in wrong format, ensure your known_hosts provided is a valid OpenSSH known_hosts') from ex
+
 def __get_data_from_key_or_file(key, filepath):
     if key != '' and filepath != '':
         raise CLIError("Error! Both textual key and key filepath cannot be provided")
@@ -236,6 +258,8 @@ def __read_key_file(path):
     except Exception as ex:
         raise CLIError("Error! Unable to read key file specified with: {0} ".format(ex)) from ex
 
+def __from_base64(base64_str):
+    return base64.b64decode(base64_str)
 
 def __to_base64(raw_data):
     bytes_data = raw_data.encode('utf-8')
