@@ -169,26 +169,6 @@ def delete_k8sconfiguration(client, resource_group_name, cluster_name, name, clu
 
     return client.delete(resource_group_name, cluster_rp, cluster_type, cluster_name, source_control_configuration_name)
 
-def __get_protected_settings(ssh_private_key, ssh_private_key_filepath, https_user, https_key):
-    protected_settings = {}
-    ssh_private_key_data = __get_data_from_key_or_file(ssh_private_key, ssh_private_key_filepath)
-
-    # Add gitops private key data to protected settings if exists
-
-    if ssh_private_key_data != '':
-        protected_settings["sshPrivateKey"] = ssh_private_key_data
-
-    # Check if both httpsUser and httpsKey exist, then add to protected settings
-    if https_user != '' and https_key != '':
-        protected_settings['httpsUser'] = __to_base64(https_user)
-        protected_settings['httpsKey'] = __to_base64(https_key)
-    elif https_user != '':
-        raise CLIError('Error! --https-user must be proivded with --https-key')
-    elif https_key != '':
-        raise CLIError('Error! --http-key must be provided with --http-user')
-
-    return protected_settings
-
 def __get_protected_settings(ssh_private_key, ssh_private_key_file, https_user, https_key):
     protected_settings = {}
     ssh_private_key_data = __get_data_from_key_or_file(ssh_private_key, ssh_private_key_file)
