@@ -26,7 +26,8 @@ from ._validators import (
 from ._consts import CONST_OUTBOUND_TYPE_LOAD_BALANCER, \
     CONST_OUTBOUND_TYPE_USER_DEFINED_ROUTING, CONST_SCALE_SET_PRIORITY_REGULAR, CONST_SCALE_SET_PRIORITY_SPOT, \
     CONST_SPOT_EVICTION_POLICY_DELETE, CONST_SPOT_EVICTION_POLICY_DEALLOCATE, \
-    CONST_NODEPOOL_MODE_SYSTEM, CONST_NODEPOOL_MODE_USER
+    CONST_NODEPOOL_MODE_SYSTEM, CONST_NODEPOOL_MODE_USER, \
+    CONST_OS_DISK_TYPE_MANAGED, CONST_OS_DISK_TYPE_EPHEMERAL
 
 
 def load_arguments(self, _):
@@ -49,6 +50,7 @@ def load_arguments(self, _):
         c.argument('admin_username', options_list=['--admin-username', '-u'], default='azureuser')
         c.argument('windows_admin_username', options_list=['--windows-admin-username'])
         c.argument('windows_admin_password', options_list=['--windows-admin-password'])
+        c.argument('enable_ahub', options_list=['--enable-ahub'])
         c.argument('dns_name_prefix', options_list=['--dns-name-prefix', '-p'])
         c.argument('generate_ssh_keys', action='store_true', validator=validate_create_parameters)
         c.argument('node_vm_size', options_list=['--node-vm-size', '-s'], completer=get_vm_size_completion_list)
@@ -99,10 +101,13 @@ def load_arguments(self, _):
         c.argument('node_resource_group')
         c.argument('attach_acr', acr_arg_type)
         c.argument('api_server_authorized_ip_ranges', type=str, validator=validate_ip_ranges)
+        c.argument('enable_ahub', options_list=['--enable-ahub'])
+        c.argument('disable_ahub', options_list=['--disable-ahub'])
         c.argument('aks_custom_headers')
         c.argument('enable_private_cluster', action='store_true')
         c.argument('enable_managed_identity', action='store_true')
         c.argument('assign_identity', type=str, validator=validate_assign_identity)
+        c.argument('disable_sgxquotehelper', action='store_true')
 
     with self.argument_context('aks update') as c:
         c.argument('enable_cluster_autoscaler', options_list=["--enable-cluster-autoscaler", "-e"], action='store_true')
@@ -154,6 +159,7 @@ def load_arguments(self, _):
             c.argument('aks_custom_headers')
             c.argument('ppg')
             c.argument('max_surge', type=str, validator=validate_max_surge)
+            c.argument('node_os_disk_type', arg_type=get_enum_type([CONST_OS_DISK_TYPE_MANAGED, CONST_OS_DISK_TYPE_EPHEMERAL]))
 
     for scope in ['aks nodepool show', 'aks nodepool delete', 'aks nodepool scale', 'aks nodepool upgrade', 'aks nodepool update']:
         with self.argument_context(scope) as c:
@@ -176,6 +182,8 @@ def load_arguments(self, _):
     with self.argument_context('aks enable-addons') as c:
         c.argument('addons', options_list=['--addons', '-a'], validator=validate_addons)
         c.argument('subnet_name', options_list=['--subnet-name', '-s'])
+        c.argument('disable_sgxquotehelper', action='store_true')
+        c.argument('osm_mesh_name', options_list=['--osm-mesh-name'])
 
     with self.argument_context('aks get-credentials') as c:
         c.argument('admin', options_list=['--admin', '-a'], default=False)

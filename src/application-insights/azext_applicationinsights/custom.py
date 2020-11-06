@@ -9,8 +9,8 @@ import datetime
 import isodate
 from knack.util import CLIError
 from knack.log import get_logger
-from azext_applicationinsights.vendored_sdks.applicationinsights.models import ErrorResponseException
 from msrestazure.azure_exceptions import CloudError
+from azext_applicationinsights.vendored_sdks.applicationinsights.models import ErrorResponseException
 from .util import get_id_from_azure_resource, get_query_targets, get_timespan, get_linked_properties
 
 logger = get_logger(__name__)
@@ -75,6 +75,32 @@ def create_or_update_component(cmd, client, application, resource_group_name, lo
         raise ex
 
 
+def _is_workspace_centric(workspace):
+    return workspace.properties['features']['enableLogAccessUsingOnlyResourcePermissions'] is False
+
+
+def _is_resource_centric(workspace):
+    return workspace.properties['features']['enableLogAccessUsingOnlyResourcePermissions'] is True
+
+
+# Here are two cases that need users' consent during APM (Application Performance Management) migration:
+# 1. Bind a workspace-centric workspace to a classic AI (no workspace integration).
+# 2. Migrate a resource-centric workspace to a workspace-centric workspace for an AI.
+def _apm_migration_consent(cmd, new_workspace_resource_id, existing_workspace_resource_id):
+    from azure.cli.command_modules.resource.custom import show_resource
+    new_workspace = show_resource(cmd, [new_workspace_resource_id])
+    if _is_workspace_centric(new_workspace):
+        if existing_workspace_resource_id:
+            existing_workspace = show_resource(cmd, [existing_workspace_resource_id])
+            need_consent = _is_resource_centric(existing_workspace)
+        else:  # This is a classic AI which isn't binding to a log analytics workspace.
+            need_consent = True
+
+        if need_consent:
+            from azure.cli.core.util import user_confirmation
+            user_confirmation('Specified workspace is configured with workspace-based access mode and some APM features may be impacted. Consider selecting another workspace or allow resource-based access in the workspace settings. Please refer to https://aka.ms/apm-workspace-access-mode for details. Do you want to continue?')
+
+
 def update_component(cmd, client, application, resource_group_name, kind=None, workspace_resource_id=None,
                      public_network_access_for_ingestion=None, public_network_access_for_query=None, retention_in_days=None):
     from ._client_factory import applicationinsights_mgmt_plane_client
@@ -87,6 +113,9 @@ def update_component(cmd, client, application, resource_group_name, kind=None, w
         except CloudError as ex:
             ex.error._message = ex.error._message + HELP_MESSAGE
             raise ex
+
+        _apm_migration_consent(cmd, workspace_resource_id, existing_component.workspace_resource_id)
+
         existing_component.workspace_resource_id = workspace_resource_id or None
     else:
         existing_component = client.get(resource_group_name, application)
@@ -110,6 +139,22 @@ def update_component(cmd, client, application, resource_group_name, kind=None, w
 
 def update_component_tags(client, application, resource_group_name, tags):
     return client.update_tags(resource_group_name, application, tags)
+
+
+def connect_webapp(cmd, resource_group_name, webapp_name, enable_profiler=None, enable_snapshot_debugger=None):
+    from azure.cli.command_modules.appservice.custom import update_app_settings
+
+    settings = []
+    if enable_profiler is True:
+        settings.append("APPINSIGHTS_PROFILERFEATURE_VERSION=1.0.0")
+    elif enable_profiler is False:
+        settings.append("APPINSIGHTS_PROFILERFEATURE_VERSION=disabled")
+
+    if enable_snapshot_debugger is True:
+        settings.append("APPINSIGHTS_SNAPSHOTFEATURE_VERSION=1.0.0")
+    elif enable_snapshot_debugger is False:
+        settings.append("APPINSIGHTS_SNAPSHOTFEATURE_VERSION=disabled")
+    return update_app_settings(cmd, resource_group_name, webapp_name, settings)
 
 
 def get_component(client, application, resource_group_name):
