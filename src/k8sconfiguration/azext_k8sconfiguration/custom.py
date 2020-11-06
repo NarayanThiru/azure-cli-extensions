@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from knack.util import CLIError
 from knack.log import get_logger
 from paramiko.hostkeys import HostKeyEntry
-from Crypto.PublicKey import RSA
+from Crypto.PublicKey import RSA, ECC, DSA
 
 from azext_k8sconfiguration.vendored_sdks.models import SourceControlConfiguration
 from azext_k8sconfiguration.vendored_sdks.models import HelmOperatorProperties
@@ -194,11 +194,23 @@ def __get_protected_settings(ssh_private_key, ssh_private_key_file, https_user, 
     ssh_private_key_data = __get_data_from_key_or_file(ssh_private_key, ssh_private_key_file)
 
     # Add gitops private key data to protected settings if exists
+    invalid_rsa_key, invalid_ecc_key, invalid_dsa_key = (False, False, False)
     if ssh_private_key_data != '':
         try:
             RSA.importKey(__from_base64(ssh_private_key_data))
-        except Exception as ex:
-            raise CLIError("Error! ssh private key provided in wrong format, ensure your private key is valid") from ex
+        except Exception:
+            invalid_rsa_key = True
+        try:
+            ECC.import_key(__from_base64(ssh_private_key_data))
+        except Exception:
+            invalid_ecc_key = True
+        try:
+            DSA.import_key(__from_base64(ssh_private_key_data))
+        except Exception:
+            invalid_dsa_key = True
+    
+        if invalid_rsa_key and invalid_ecc_key and invalid_dsa_key:
+            raise CLIError("Error! ssh private key provided in wrong format, ensure your private key is valid")
         protected_settings["sshPrivateKey"] = ssh_private_key_data
 
     # Check if both httpsUser and httpsKey exist, then add to protected settings
@@ -206,7 +218,7 @@ def __get_protected_settings(ssh_private_key, ssh_private_key_file, https_user, 
         protected_settings['httpsUser'] = __to_base64(https_user)
         protected_settings['httpsKey'] = __to_base64(https_key)
     elif https_user != '':
-        raise CLIError('Error! --https-user must be proivded with --https-key')
+        raise CLIError('Error! --https-user must be provided with --https-key')
     elif https_key != '':
         raise CLIError('Error! --http-key must be provided with --http-user')
 
@@ -247,7 +259,11 @@ def __validate_url_with_params(repository_url, ssh_private_key_set, known_hosts_
 
 
 def __validate_known_hosts(knownhost_data):
-    knownhost_str = __from_base64(knownhost_data).decode('utf-8')
+    try: 
+        knownhost_str = __from_base64(knownhost_data).decode('utf-8')
+    except Exception as ex:
+        raise CLIError('Error! ssh known_hosts is not a valid utf-8 base64 encoded '
+                        'string') from ex
     lines = knownhost_str.split('\n')
     for line in lines:
         line = line.strip(' ')
