@@ -197,7 +197,7 @@ def __get_protected_settings(ssh_private_key, ssh_private_key_file, https_user, 
     invalid_rsa_key, invalid_ecc_key, invalid_dsa_key = (False, False, False)
     if ssh_private_key_data != '':
         try:
-            RSA.importKey(__from_base64(ssh_private_key_data))
+            RSA.import_key(__from_base64(ssh_private_key_data))
         except Exception:
             invalid_rsa_key = True
         try:
@@ -209,6 +209,7 @@ def __get_protected_settings(ssh_private_key, ssh_private_key_file, https_user, 
         except Exception:
             invalid_dsa_key = True
     
+        print(invalid_rsa_key, invalid_ecc_key, invalid_dsa_key)
         if invalid_rsa_key and invalid_ecc_key and invalid_dsa_key:
             raise CLIError("Error! ssh private key provided in wrong format, ensure your private key is valid")
         protected_settings["sshPrivateKey"] = ssh_private_key_data
