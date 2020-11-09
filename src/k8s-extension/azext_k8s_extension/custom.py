@@ -106,7 +106,7 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
         logger.warning('Ignoring name, release_namespace and scope parameters since azuremonitor-containers '
                        'only supports cluster scope and single instance of this extension')
         name = extension_type_lower
-        release_namespace = extension_type_lower
+        release_namespace = extension_type_lower.replace('.', '-')
         scope = 'cluster'
         if not config_settings:
             config_settings = {}
