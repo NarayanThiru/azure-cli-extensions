@@ -328,7 +328,7 @@ def _ensure_container_insights_for_monitoring(cmd, workspace_resource_id):
 
 
 def _get_container_insights_settings(cmd, cluster_resource_group_name,
-                                     cluster_name, configuration_settings, configuration_protected_settings):
+                                     cluster_name, configuration_settings, configuration_protected_settings, should_ensure_ci_solution):
 
     subscription_id = get_subscription_id(cmd.cli_ctx)
     workspace_resource_id = ''
@@ -359,7 +359,8 @@ def _get_container_insights_settings(cmd, cluster_resource_group_name,
         if not is_valid_resource_id(workspace_resource_id):
             raise CLIError('{} is not a valid Azure resource ID.'.format(workspace_resource_id))
 
-    _ensure_container_insights_for_monitoring(cmd, workspace_resource_id)
+    if should_ensure_ci_solution
+        _ensure_container_insights_for_monitoring(cmd, workspace_resource_id)
 
     # extract subscription ID and resource group from workspace_resource_id URL
     parsed = parse_resource_id(workspace_resource_id)
