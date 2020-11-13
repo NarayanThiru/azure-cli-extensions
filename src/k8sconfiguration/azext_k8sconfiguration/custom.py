@@ -7,8 +7,10 @@ import base64
 from urllib.parse import urlparse
 from knack.util import CLIError
 from knack.log import get_logger
+from paramiko.ed25519key import Ed25519Key
 from paramiko.hostkeys import HostKeyEntry
 from Crypto.PublicKey import RSA, ECC, DSA
+import io
 
 from azext_k8sconfiguration.vendored_sdks.models import SourceControlConfiguration
 from azext_k8sconfiguration.vendored_sdks.models import HelmOperatorProperties
@@ -174,7 +176,8 @@ def __get_protected_settings(ssh_private_key, ssh_private_key_file, https_user, 
     ssh_private_key_data = __get_data_from_key_or_file(ssh_private_key, ssh_private_key_file)
 
     # Add gitops private key data to protected settings if exists
-    invalid_rsa_key, invalid_ecc_key, invalid_dsa_key = (False, False, False)
+    # Dry-run all key types to determine if the private key is in a valid format
+    invalid_rsa_key, invalid_ecc_key, invalid_dsa_key, invalid_ed25519_key = (False, False, False, False)
     if ssh_private_key_data != '':
         try:
             RSA.import_key(__from_base64(ssh_private_key_data))
@@ -188,8 +191,13 @@ def __get_protected_settings(ssh_private_key, ssh_private_key_file, https_user, 
             DSA.import_key(__from_base64(ssh_private_key_data))
         except Exception:
             invalid_dsa_key = True
+        try:
+            key_obj = io.StringIO(__from_base64(ssh_private_key_data).decode('utf-8'))
+            Ed25519Key(file_obj=key_obj)
+        except Exception:
+            invalid_ed25519_key = True
 
-        if invalid_rsa_key and invalid_ecc_key and invalid_dsa_key:
+        if invalid_rsa_key and invalid_ecc_key and invalid_dsa_key and invalid_ed25519_key:
             raise CLIError("Error! ssh private key provided in wrong format, ensure your private key is valid")
         protected_settings["sshPrivateKey"] = ssh_private_key_data
 
