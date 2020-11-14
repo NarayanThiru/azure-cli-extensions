@@ -4,13 +4,14 @@
 # --------------------------------------------------------------------------------------------
 
 import base64
+import io
+
 from urllib.parse import urlparse
 from knack.util import CLIError
 from knack.log import get_logger
 from paramiko.ed25519key import Ed25519Key
 from paramiko.hostkeys import HostKeyEntry
 from Crypto.PublicKey import RSA, ECC, DSA
-import io
 
 from azext_k8sconfiguration.vendored_sdks.models import SourceControlConfiguration
 from azext_k8sconfiguration.vendored_sdks.models import HelmOperatorProperties
