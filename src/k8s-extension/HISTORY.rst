@@ -15,3 +15,14 @@ Release History
 ++++++++++++++++++
 
 * Add support for Arc Appliance cluster type
+
+0.1.3
+++++++++++++++++++
+
+* Customization for microsoft.openservicemesh
+
+0.1.4
+++++++++++++++++++
+
+* Refactor for clear separation of extension-type specific customizations
+* Introduce new versioning scheme to allow Preview releases by Partners

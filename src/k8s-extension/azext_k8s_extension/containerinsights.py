@@ -332,25 +332,28 @@ def _get_container_insights_settings(cmd, cluster_resource_group_name, cluster_n
 
     subscription_id = get_subscription_id(cmd.cli_ctx)
     workspace_resource_id = ''
-    if 'loganalyticsworkspaceresourceid' in configuration_settings:
-        configuration_settings['logAnalyticsWorkspaceResourceID'] = configuration_settings.pop\
-            ('loganalyticsworkspaceresourceid')
 
-    if 'logAnalyticsWorkspaceResourceID' in configuration_settings:
-        workspace_resource_id = configuration_settings['logAnalyticsWorkspaceResourceID']
+    if configuration_settings is not None:
+        if 'loganalyticsworkspaceresourceid' in configuration_settings:
+            configuration_settings['logAnalyticsWorkspaceResourceID'] = configuration_settings.pop\
+                ('loganalyticsworkspaceresourceid')
+
+        if 'logAnalyticsWorkspaceResourceID' in configuration_settings:
+            workspace_resource_id = configuration_settings['logAnalyticsWorkspaceResourceID']
 
     workspace_resource_id = workspace_resource_id.strip()
 
-    if  'proxyEndpoint' in configuration_protected_settings:
-        # current supported format for proxy endpoint is  http(s)://<user>:<pwd>@<proxyhost>:<port>
-        # do some basic validation since the ci agent does the complete validation
-        proxy = configuration_protected_settings['proxyEndpoint'].strip().lower()
-        proxy_parts = proxy.split('://')
-        if (not proxy) or (not proxy.startswith('http://') and not proxy.startswith('https://')) or \
-                (len(proxy_parts) != 2):
-            raise CLIError('proxyEndpoint url should in this format http(s)://<user>:<pwd>@<proxyhost>:<port>')
-        logger.info("successfully validated proxyEndpoint url hence passing proxy endpoint to extension")
-        configuration_protected_settings['omsagent.proxy'] = configuration_protected_settings['proxyEndpoint']
+    if configuration_protected_settings is not None:
+        if  'proxyEndpoint' in configuration_protected_settings:
+            # current supported format for proxy endpoint is  http(s)://<user>:<pwd>@<proxyhost>:<port>
+            # do some basic validation since the ci agent does the complete validation
+            proxy = configuration_protected_settings['proxyEndpoint'].strip().lower()
+            proxy_parts = proxy.split('://')
+            if (not proxy) or (not proxy.startswith('http://') and not proxy.startswith('https://')) or \
+                    (len(proxy_parts) != 2):
+                raise CLIError('proxyEndpoint url should in this format http(s)://<user>:<pwd>@<proxyhost>:<port>')
+            logger.info("successfully validated proxyEndpoint url hence passing proxy endpoint to extension")
+            configuration_protected_settings['omsagent.proxy'] = configuration_protected_settings['proxyEndpoint']
 
     if not workspace_resource_id:
         workspace_resource_id = _ensure_default_log_analytics_workspace_for_monitoring(

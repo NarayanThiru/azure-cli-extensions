@@ -13,6 +13,7 @@ from azext_k8s_extension.vendored_sdks.models import ErrorResponseException
 from azext_k8s_extension.vendored_sdks.models import ScopeCluster
 from azext_k8s_extension.vendored_sdks.models import ScopeNamespace
 from azext_k8s_extension.vendored_sdks.models import Scope
+from .partner_customization import *
 from .containerinsights import _get_container_insights_settings
 from azure.cli.core.commands.client_factory import get_subscription_id
 from msrestazure.azure_exceptions import CloudError
@@ -37,7 +38,7 @@ def show_k8s_extension(client, resource_group_name, cluster_name, name, cluster_
         if ex.response.status_code == 404:
             # If Cluster not found
             if ex.message.__contains__("(ResourceNotFound)"):
-                message = "{0} Verify that the --cluster-type is correct and the resource exists.".format(
+                message = "{0} Verify that the cluster-type is correct and the resource exists.".format(
                     ex.message)
             # If Configuration not found
             elif ex.message.__contains__("Operation returned an invalid status code 'Not Found'"):
@@ -57,22 +58,17 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
     """Create a new Extension Instance.
 
     """
+    extension_type_lower = extension_type.lower()
+
     # Determine ClusterRP
     cluster_rp = __get_cluster_rp(cluster_type)
 
-    # Validate scope and namespace
-    __validate_scope_and_namespace(scope, release_namespace, target_namespace, name)
-
-    # Validate version, release_train
-    __validate_version_and_release_train(
-        version, release_train, auto_upgrade_minor_version)
-
     # Configuration Settings & Configuration Protected Settings
     if configuration_settings is not None and configuration_settings_file is not None:
-        raise CLIError('Error! Both configuration_settings and configuration_settings_file cannot be provided.')
+        raise CLIError('Error! Both configuration-settings and configuration-settings-file cannot be provided.')
 
     if configuration_protected_settings is not None and configuration_protected_settings_file is not None:
-        raise CLIError('Error! Both configuration_protected_settings and configuration_protected_settings_file '
+        raise CLIError('Error! Both configuration-protected-settings and configuration-protected-settings-file '
                        'cannot be provided.')
 
     config_settings = {}
@@ -96,72 +92,57 @@ def create_k8s_extension(cmd, client, resource_group_name, cluster_name, name, c
             for key, value in dicts.items():
                 config_protected_settings[key] = value
 
-    # ExtensionType specific conditions
-    extension_type_lower = extension_type.lower()
+    # Identity is not created by default.  Extension type must specify if identity is required.
+    create_identity = False
 
-    if extension_type_lower in 'azuremonitor-containers' 'microsoft.azuredefender.kubernetes':
-        create_identity = True
-        # hardcoding  name, release_namespace and scope since ci only supports one instance and cluster scope
-        # and platform doesnt have support yet extension specific constraints like this
-        logger.warning('Ignoring name, release_namespace and scope parameters since {0} '
-                       'only supports cluster scope and single instance of this extension'.format(extension_type_lower))
+    extension_instance = None
 
-        scope = 'cluster'
-        if not config_settings:
-            config_settings = {}
-
-        if not config_protected_settings:
-            config_protected_settings = {}
-
-        if extension_type.lower() == "azuremonitor-containers":
-            name = 'azuremonitor-containers'
-            release_namespace = 'azuremonitor-containers'
-            is_ci_extension_type = True
-        else:
-            name = extension_type_lower
-            release_namespace = "microsoft-azuredefender-kubernetes"
-            is_ci_extension_type = False
-
-        _get_container_insights_settings(cmd, resource_group_name, cluster_name, config_settings,
-                                         config_protected_settings, is_ci_extension_type)
-
-    # Determine namespace name
-    if scope == 'cluster':
-        if release_namespace is None:
-            release_namespace = name
-        scope_cluster = ScopeCluster(release_namespace=release_namespace)
-        ext_scope = Scope(cluster=scope_cluster, namespace=None)
+    # Give Partners a chance to their extensionType specific validations and to set value over-rides.
+    if extension_type_lower == 'microsoft.openservicemesh':
+        extension_instance, create_identity = \
+            microsoft_openservicemesh_create(cmd, client, resource_group_name,
+                                             cluster_name, name, cluster_type,
+                                             extension_type_lower, scope,
+                                             auto_upgrade_minor_version,
+                                             release_train, version, target_namespace,
+                                             release_namespace, config_settings,
+                                             config_protected_settings,
+                                             configuration_settings_file,
+                                             configuration_protected_settings_file)
+    elif extension_type_lower == 'azuremonitor-containers':
+        extension_instance, create_identity = \
+            azuremonitor_containers_create(cmd, client, resource_group_name,
+                                           cluster_name, name, cluster_type,
+                                           extension_type_lower, scope,
+                                           auto_upgrade_minor_version,
+                                           release_train, version, target_namespace,
+                                           release_namespace, config_settings,
+                                           config_protected_settings,
+                                           configuration_settings_file,
+                                           configuration_protected_settings_file)
+    elif extension_type_lower == 'microsoft.azuredefender.kubernetes':
+        extension_instance, create_identity = \
+            microsoft_azuredefender_kubernetes_create(cmd, client, resource_group_name,
+                                                      cluster_name, name, cluster_type,
+                                                      extension_type_lower, scope,
+                                                      auto_upgrade_minor_version,
+                                                      release_train, version, target_namespace,
+                                                      release_namespace, config_settings,
+                                                      config_protected_settings,
+                                                      configuration_settings_file,
+                                                      configuration_protected_settings_file)
     else:
-        if target_namespace is None:
-            target_namespace = name
-        scope_namespace = ScopeNamespace(target_namespace=target_namespace)
-        ext_scope = Scope(namespace=scope_namespace, cluster=None)
+        # Error - unknown extensionType
+        CLIError('The extension-type {} is not supported!'.format(extension_type))
 
-    identity_object = None
-    cluster_location = ""
-    # Create identity
+    # Now that the values are set by Partners, let us do common validations
+    __validate_scope_and_namespace(scope, release_namespace, target_namespace)
+    __validate_version_and_auto_upgrade(version, auto_upgrade_minor_version)
+
+    # Create identity, if required
     if create_identity:
-        subscription_id = get_subscription_id(cmd.cli_ctx)
-        resources = cf_resources(cmd.cli_ctx, subscription_id)
-        cluster_resource_id = '/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Kubernetes/' \
-                              'connectedClusters/{2}'.format(subscription_id, resource_group_name, cluster_name)
-        try:
-            resource = resources.get_by_id(cluster_resource_id, '2020-01-01-preview')
-            cluster_location = str(resource.location.lower())
-        except CloudError as ex:
-            raise ex
-        identity_type = "SystemAssigned"
-        identity_object = ConfigurationIdentity(type=identity_type)
-    # Create Extension Instance object
-    extension_instance = ExtensionInstanceForCreate(extension_type=extension_type,
-                                                    auto_upgrade_minor_version=auto_upgrade_minor_version,
-                                                    release_train=release_train,
-                                                    version=version,
-                                                    scope=ext_scope,
-                                                    configuration_settings=config_settings,
-                                                    configuration_protected_settings=config_protected_settings,
-                                                    identity=identity_object,
-                                                    location=cluster_location)
+        extension_instance.identity, extension_instance.location = \
+            __create_identity(cmd, resource_group_name, cluster_name)
 
     # Try to create the resource
     return client.create(resource_group_name, cluster_rp, cluster_type, cluster_name, name, extension_instance)
@@ -181,11 +162,31 @@ def update_k8s_extension(client, resource_group_name, cluster_type, cluster_name
     # Ensure some values are provided for update
     if auto_upgrade_minor_version is None and release_train is None and version is None:
         message = "No values provided for update. Provide new value(s) for one or more of these properties:" \
-                  " auto_upgrade_minor_version, release_train or version."
+                  " auto-upgrade-minor-version, release-train or version."
         CLIError(message)
 
     # Determine ClusterRP
     cluster_rp = __get_cluster_rp(cluster_type)
+
+    # Get the existing extensionInstance
+    extension = client.get(resource_group_name, cluster_rp, cluster_type, cluster_name, name)
+
+    extension_type_lower = extension.extension_type.lower()
+
+    # Give Partners a chance to their extensionType specific validations and to set value over-rides.
+    if extension_type_lower == 'microsoft.openservicemesh':
+        upd_extension = microsoft_openservicemesh_update(extension, auto_upgrade_minor_version, release_train, version)
+    elif extension_type_lower == 'azuremonitor-containers':
+        upd_extension = azuremonitor_containers_update(extension, auto_upgrade_minor_version, release_train, version)
+    elif extension_type_lower == 'microsoft.azuredefender.kubernetes':
+        upd_extension = microsoft_azuredefender_kubernetes_update(extension, auto_upgrade_minor_version, release_train,
+                                                                  version)
+    else:
+        # Error - unknown extensionType
+        CLIError('The extension-type {} is not supported!'.format(extension.extension_type))
+
+    __validate_version_and_auto_upgrade(version, auto_upgrade_minor_version)
+
     upd_extension = ExtensionInstanceUpdate(auto_upgrade_minor_version=auto_upgrade_minor_version,
                                             release_train=release_train, version=version)
 
@@ -204,6 +205,21 @@ def delete_k8s_extension(client, resource_group_name, cluster_name, name, cluste
     return client.delete(resource_group_name, cluster_rp, cluster_type, cluster_name, k8s_extension_instance_name)
 
 
+def __create_identity(cmd, resource_group_name, cluster_name):
+    subscription_id = get_subscription_id(cmd.cli_ctx)
+    resources = cf_resources(cmd.cli_ctx, subscription_id)
+    cluster_resource_id = '/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Kubernetes/' \
+                            'connectedClusters/{2}'.format(subscription_id, resource_group_name, cluster_name)
+    try:
+        resource = resources.get_by_id(cluster_resource_id, '2020-01-01-preview')
+        location = str(resource.location.lower())
+    except CloudError as ex:
+        raise ex
+    identity_type = "SystemAssigned"
+
+    return ConfigurationIdentity(type=identity_type), location
+
+
 def __get_cluster_rp(cluster_type):
     rp = ""
     if cluster_type.lower() == 'connectedclusters':
@@ -215,24 +231,19 @@ def __get_cluster_rp(cluster_type):
     return rp
 
 
-def __validate_scope_and_namespace(scope, release_namespace, target_namespace, name):
+def __validate_scope_and_namespace(scope, release_namespace, target_namespace):
     if scope == 'cluster':
         if target_namespace is not None:
-            message = "When Scope is 'cluster', target_namespace must not be given."
+            message = "When Scope is 'cluster', target-namespace must not be given."
             raise CLIError(message)
-        if release_namespace is None:
-            release_namespace = name
     else:
         if release_namespace is not None:
-            message = "When Scope is 'namespace', release_namespace must not be given."
+            message = "When Scope is 'namespace', release-namespace must not be given."
             raise CLIError(message)
 
 
-def __validate_version_and_release_train(version, release_train, auto_upgrade_minor_version):
+def __validate_version_and_auto_upgrade(version, auto_upgrade_minor_version):
     if version is not None:
-        if release_train is not None:
-            message = "Both release_train and version cannot be given. To pin to specific version, give only version."
-            raise CLIError(message)
         if auto_upgrade_minor_version is not False:
             message = "To pin to specific version, auto-upgrade-minor-version must be set to 'false'."
             raise CLIError(message)
